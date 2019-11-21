@@ -1,0 +1,20 @@
+---
+title: "Homework 6"
+author: "Olivia Wagner"
+date: "11/21/2019"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+```
+
+```{r problem 1}
+birthweight_data = janitor::clean_names(read_csv('./birthweight.csv'))
+
+print(birthweight_data)
+
+# Data Clean #
+```
+
