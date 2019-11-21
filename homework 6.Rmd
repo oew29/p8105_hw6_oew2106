@@ -8,6 +8,7 @@ output: github_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(knitr)
+library(modelr)
 ```
 
 ```{r problem 1 models}
@@ -31,6 +32,16 @@ summary(initial_model)
 hyp_model = lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mrace + parity + ppwt + blength*bhead + delwt*ppwt, data = birthweight_data)
 summary(hyp_model)
 
+# residual plot #
+
+hyp_plot = birthweight_data %>% 
+  add_residuals(hyp_model) %>%
+  add_predictions(hyp_model) %>%
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(aes(alpha = 0.30))
+
+print(hyp_plot)
+
 # model 2 #
 
 birth_age_model = lm(bwt ~ blength + gaweeks, data = birthweight_data)
@@ -40,6 +51,45 @@ summary(birth_age_model)
 
 length_gender_model = lm(bwt ~ bhead + babysex + blength + bhead*blength + bhead*babysex + babysex*blength + babysex*blength*bhead, data = birthweight_data)
 summary(length_gender_model)
+
+```
+
+ To create my hypothesized model, I initially fit a saturated model then pared down the number of variables to those that had a p-value of 0.20 or less, and created interactions for varaibles whose measurements seemed to be correlated. In plotting the residuals vs. the predicted values above we see most of the variation seems to be scattered fairly evenly across resid = 0, with the exception of a few values in the left tail of the data. 
+ 
+ 
+
+```{r problem 1 CV}
+# cross validation #
+cv_df = crossv_mc(birthweight_data, 100)
+cv_df = cv_df %>% mutate(train = map(train, as_tibble, test = map(as_tibble)))
+
+cv_df = cv_df %>% 
+  mutate(hyp_mod = map(train, ~lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mrace + parity + ppwt + blength*bhead + delwt*ppwt, data = .x)), 
+         age_mod = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)), 
+         length_mod = map(train, ~lm(bwt ~ bhead + babysex + blength + bhead*blength + bhead*babysex + babysex*blength + babysex*blength*bhead, data = .x)))%>%
+  mutate(rmse_hyp = map2_dbl(hyp_mod, test, ~rmse(model = .x, data = .y)), 
+         rmse_age = map2_dbl(age_mod, test, ~rmse(model = .x, data = .y)), 
+         rmse_length = map2_dbl(length_mod, test, ~rmse(model = .x, data = .y)))
+
+
+# prediction error plot #
+prediction_error = cv_df%>%
+  select(starts_with('rmse')) %>%
+  pivot_longer(everything(), names_to = 'model', values_to = 'rmse', names_prefix = 'rmse_') %>%
+  mutate(model = fct_inorder(model)) %>%
+  mutate(model = fct_inorder(model)) %>%
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin() %>% 
+  print()
+  
+
+```
+
+The best performing model was my hypothesized model. The amount of cross validation prediction error is far lower than the other two models (birth/gestational age and head/length measurement models). The adjusted p-value is also greater then the other two models.
+
+
+
+```{r problem 2}
 
 ```
 
