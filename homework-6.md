@@ -262,3 +262,138 @@ The best performing model was my hypothesized model. The amount of cross
 validation prediction error is far lower than the other two models
 (birth/gestational age and head/length measurement models). The adjusted
 p-value is also greater then the other two models.
+
+``` r
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+    ## Registered S3 method overwritten by 'crul':
+    ##   method                 from
+    ##   as.character.form_file httr
+
+    ## Registered S3 method overwritten by 'hoardr':
+    ##   method           from
+    ##   print.cache_info httr
+
+    ## file path:          /Users/oliviaewagner/Library/Caches/rnoaa/ghcnd/USW00094728.dly
+
+    ## file last updated:  2019-11-21 12:56:53
+
+    ## file min/max dates: 1869-01-01 / 2019-11-30
+
+``` r
+# bootstrap #
+
+boot_straps = weather_df %>%
+  modelr::bootstrap(n = 5000)
+
+# work on log(beta0 * beta1) #
+boot_strap_df = boot_straps %>% mutate(models = map(strap, ~lm(tmax ~ tmin, data = .x)), results = map(models, broom::tidy)) %>%
+  select(-strap, -models) %>%
+  unnest(results) %>%
+  group_by(.id) %>%
+  mutate(min_est = ifelse(term == 'tmin', estimate, 0), int_est = ifelse(term == '(Intercept)', estimate, 0)) 
+  
+log_param = boot_strap_df %>%
+  group_by(.id) %>%
+  summarize(min_est = sum(min_est), int_est = sum(int_est)) %>%
+  mutate(log_min_max = log(min_est*int_est)) %>%
+  print()
+```
+
+    ## # A tibble: 5,000 x 4
+    ##    .id   min_est int_est log_min_max
+    ##    <chr>   <dbl>   <dbl>       <dbl>
+    ##  1 0001     1.02    7.48        2.03
+    ##  2 0002     1.03    7.24        2.01
+    ##  3 0003     1.04    7.14        2.00
+    ##  4 0004     1.05    7.21        2.03
+    ##  5 0005     1.05    7.16        2.02
+    ##  6 0006     1.04    7.08        2.00
+    ##  7 0007     1.06    6.89        1.99
+    ##  8 0008     1.05    7.20        2.02
+    ##  9 0009     1.04    7.22        2.02
+    ## 10 0010     1.06    6.90        1.99
+    ## # … with 4,990 more rows
+
+``` r
+# work on r^2 #
+
+boot_strap_df_corr = boot_straps %>% mutate(models = map(strap, ~lm(tmax ~ tmin, data = .x)), results = map(models, broom::glance)) %>%
+  select(-strap, -models) %>%
+  unnest(results) %>% 
+  select(.id, r.squared)
+
+# plot distributions #
+
+ggplot(data = boot_strap_df_corr, aes(x = r.squared)) +
+  geom_histogram(aes(y = ..density..), color = 'black', fill = 'white')+
+  geom_density(alpha = 0.25, fill = '#FF6666')+
+  ggtitle('Distribution of R squared')
+```
+
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+![](homework-6_files/figure-gfm/problem%202-1.png)<!-- -->
+
+``` r
+ggplot(data = log_param, aes(x = log_min_max)) +
+  geom_histogram(aes(y = ..density..), color = 'black', fill = 'white')+
+  geom_density(alpha = 0.25, fill = '#FF6666')+
+  ggtitle('Distribution of log(beta_0 * beta_1)')
+```
+
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+![](homework-6_files/figure-gfm/problem%202-2.png)<!-- -->
+
+``` r
+# Confidence Intervals #
+    # R squared upper bound #
+    quantile(pull(boot_strap_df_corr, r.squared), 0.975)
+```
+
+    ##     97.5% 
+    ## 0.9271234
+
+``` r
+    # R squared lower bound #
+    quantile(pull(boot_strap_df_corr, r.squared), 0.025)
+```
+
+    ##      2.5% 
+    ## 0.8939398
+
+``` r
+    # log estimate upper bound #
+    quantile(pull(log_param, log_min_max), 0.975)
+```
+
+    ##    97.5% 
+    ## 2.058739
+
+``` r
+    #log estimate lower bound #
+    quantile(pull(log_param, log_min_max), 0.025)
+```
+
+    ##     2.5% 
+    ## 1.965828
+
+The distribution of both of these estimates appear to be approximately
+normal, with the distribution of r squared values slightly skewed to the
+left.
+
+R squared 95% CI : (0.8946, 0.9272)
+
+log(\(\hat{\beta_{0}}*\hat{\beta_{1}}\)) 95% CI: (1.964, 2.058)

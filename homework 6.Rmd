@@ -91,5 +91,71 @@ The best performing model was my hypothesized model. The amount of cross validat
 
 ```{r problem 2}
 
-```
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
 
+
+# bootstrap #
+
+boot_straps = weather_df %>%
+  modelr::bootstrap(n = 5000)
+
+# work on log(beta0 * beta1) #
+boot_strap_df = boot_straps %>% mutate(models = map(strap, ~lm(tmax ~ tmin, data = .x)), results = map(models, broom::tidy)) %>%
+  select(-strap, -models) %>%
+  unnest(results) %>%
+  group_by(.id) %>%
+  mutate(min_est = ifelse(term == 'tmin', estimate, 0), int_est = ifelse(term == '(Intercept)', estimate, 0)) 
+  
+log_param = boot_strap_df %>%
+  group_by(.id) %>%
+  summarize(min_est = sum(min_est), int_est = sum(int_est)) %>%
+  mutate(log_min_max = log(min_est*int_est)) %>%
+  print()
+
+# work on r^2 #
+
+boot_strap_df_corr = boot_straps %>% mutate(models = map(strap, ~lm(tmax ~ tmin, data = .x)), results = map(models, broom::glance)) %>%
+  select(-strap, -models) %>%
+  unnest(results) %>% 
+  select(.id, r.squared)
+
+# plot distributions #
+
+ggplot(data = boot_strap_df_corr, aes(x = r.squared)) +
+  geom_histogram(aes(y = ..density..), color = 'black', fill = 'white')+
+  geom_density(alpha = 0.25, fill = '#FF6666')+
+  ggtitle('Distribution of R squared')
+
+ggplot(data = log_param, aes(x = log_min_max)) +
+  geom_histogram(aes(y = ..density..), color = 'black', fill = 'white')+
+  geom_density(alpha = 0.25, fill = '#FF6666')+
+  ggtitle('Distribution of log(beta_0 * beta_1)')
+
+# Confidence Intervals #
+    # R squared upper bound #
+    quantile(pull(boot_strap_df_corr, r.squared), 0.975)
+    # R squared lower bound #
+    quantile(pull(boot_strap_df_corr, r.squared), 0.025)
+    
+    
+    # log estimate upper bound #
+    quantile(pull(log_param, log_min_max), 0.975)
+    #log estimate lower bound #
+    quantile(pull(log_param, log_min_max), 0.025)
+
+```
+The distribution of both of these estimates appear to be approximately normal, with the distribution of r squared values slightly skewed to the left. 
+
+R squared 95% CI : (0.8946, 0.9272)
+
+log($\hat{\beta_{0}}*\hat{\beta_{1}}$) 95% CI: (1.964, 2.058)
