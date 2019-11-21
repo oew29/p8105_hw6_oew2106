@@ -10,11 +10,36 @@ library(tidyverse)
 library(knitr)
 ```
 
-```{r problem 1}
+```{r problem 1 models}
 birthweight_data = janitor::clean_names(read_csv('./birthweight.csv'))
 
 print(birthweight_data)
 
 # Data Clean #
+
+missing  = apply(birthweight_data, 2, function(x) any(is.infinite(x) | is.na(x)))
+print(missing)
+
+birthweight_data = birthweight_data %>%
+  mutate(mrace = as.factor(mrace), malform = as.factor(malform), frace = as.factor(frace), babysex = as.factor(babysex)) 
+
+# Hypothesized Model #
+
+initial_model = lm(bwt ~ ., data = birthweight_data)
+summary(initial_model)
+
+hyp_model = lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mrace + parity + ppwt + blength*bhead + delwt*ppwt, data = birthweight_data)
+summary(hyp_model)
+
+# model 2 #
+
+birth_age_model = lm(bwt ~ blength + gaweeks, data = birthweight_data)
+summary(birth_age_model)
+
+# model 3 #
+
+length_gender_model = lm(bwt ~ bhead + babysex + blength + bhead*blength + bhead*babysex + babysex*blength + babysex*blength*bhead, data = birthweight_data)
+summary(length_gender_model)
+
 ```
 
